@@ -1,0 +1,19 @@
+[workspace]
+members = ["crates/acs"]
+
+[package]
+name = "agentview"
+version = "0.1.0"
+edition = "2021"
+description = "Native GNOME/Wayland viewer for Microsoft Agent (.acs) characters"
+
+[dependencies]
+acs = { path = "crates/acs" }
+gtk = { package = "gtk4", version = "0.11", features = ["v4_14"] }
+adw = { package = "libadwaita", version = "0.9", features = ["v1_5"] }
+glib = "0.22"
+gdk = { package = "gdk4", version = "0.11" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
