@@ -53,6 +53,10 @@ mod imp {
         pub texture: RefCell<Option<gdk::Texture>>,
         pub balloon: RefCell<Option<Balloon>>,
         pub backdrop: Cell<Backdrop>,
+        /// Artwork extent within the texture, in texture pixels, as
+        /// `(left, top, right, bottom)`. Used to anchor the balloon to the
+        /// character rather than to the transparent canvas around it.
+        pub content: Cell<Option<(f32, f32, f32, f32)>>,
         /// Zoom multiplier applied on top of fit-to-window scaling.
         pub zoom: Cell<f64>,
         pub fit: Cell<bool>,
@@ -65,6 +69,7 @@ mod imp {
                 texture: RefCell::new(None),
                 balloon: RefCell::new(None),
                 backdrop: Cell::new(Backdrop::default()),
+                content: Cell::new(None),
                 zoom: Cell::new(1.0),
                 fit: Cell::new(true),
                 smooth: Cell::new(true),
@@ -128,7 +133,14 @@ mod imp {
             snapshot.append_scaled_texture(texture, filter, &graphene::Rect::new(x, y, dw, dh));
 
             if let Some(balloon) = self.balloon.borrow().as_ref() {
-                self.draw_balloon(snapshot, balloon, w, x + dw / 2.0, y);
+                // Point the balloon at the top-centre of the artwork itself.
+                let (anchor_x, anchor_y) = match self.content.get() {
+                    Some((left, top, right, _)) => {
+                        (x + (left + right) / 2.0 * scale, y + top * scale)
+                    }
+                    None => (x + dw / 2.0, y),
+                };
+                self.draw_balloon(snapshot, balloon, w, anchor_x, anchor_y);
             }
         }
     }
@@ -204,9 +216,11 @@ mod imp {
 
             // Width follows the character's authored line length, bounded by
             // the space actually available.
-            let by_chars = balloon.chars_per_line as f64 * balloon.font_size_pt * 0.62;
+            let by_chars = (balloon.chars_per_line as f64 * balloon.font_size_pt * 0.62) as f32;
             let max_w = (widget_w - 2.0 * BALLOON_PADDING - 16.0).max(80.0);
-            let wrap_w = (by_chars as f32).clamp(120.0, max_w);
+            // In a very narrow window the preferred minimum can exceed the
+            // space available, so the lower bound yields to the upper one.
+            let wrap_w = by_chars.clamp(120.0f32.min(max_w), max_w);
             layout.set_wrap(pango::WrapMode::WordChar);
             layout.set_width((wrap_w * pango::SCALE as f32) as i32);
 
@@ -223,7 +237,12 @@ mod imp {
 
             // Tail, drawn first so the body's border overlaps its base cleanly.
             let tail_base_y = box_y + box_h;
-            let tail_x = anchor_x.clamp(box_x + BALLOON_RADIUS + TAIL_WIDTH, box_x + box_w - BALLOON_RADIUS - TAIL_WIDTH);
+            // Keep the tail clear of the rounded corners; centre it when the
+            // balloon is too narrow to offer any choice.
+            let tail_lo = box_x + BALLOON_RADIUS + TAIL_WIDTH / 2.0;
+            let tail_hi = box_x + box_w - BALLOON_RADIUS - TAIL_WIDTH / 2.0;
+            let tail_x =
+                if tail_lo <= tail_hi { anchor_x.clamp(tail_lo, tail_hi) } else { box_x + box_w / 2.0 };
             let tail_tip_y = (tail_base_y + TAIL_HEIGHT).min(anchor_y);
 
             let builder = gsk::PathBuilder::new();
@@ -287,6 +306,13 @@ impl Stage {
             self.queue_resize();
         }
         self.queue_draw();
+    }
+
+    /// Records where the artwork sits inside the texture, in texture pixels.
+    pub fn set_content_bounds(&self, bounds: Option<(u32, u32, u32, u32)>) {
+        self.imp().content.set(
+            bounds.map(|(l, t, r, b)| (l as f32, t as f32, r as f32, b as f32)),
+        );
     }
 
     pub fn set_balloon(&self, balloon: Option<Balloon>) {

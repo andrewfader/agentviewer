@@ -58,7 +58,11 @@ struct Ui {
     placeholder: gtk::Label,
 }
 
-pub fn build(app: &adw::Application, initial: Option<PathBuf>) -> adw::ApplicationWindow {
+pub fn build(
+    app: &adw::Application,
+    initial: Option<PathBuf>,
+    startup: crate::Startup,
+) -> adw::ApplicationWindow {
     let state = Rc::new(RefCell::new(State { sound_enabled: true, ..State::default() }));
     let audio = AudioPlayer::new();
 
@@ -286,9 +290,42 @@ pub fn build(app: &adw::Application, initial: Option<PathBuf>) -> adw::Applicati
 
     if let Some(path) = initial {
         load(&ui, &state, &audio, &path);
+        apply_startup(&ui, &state, &audio, startup);
     }
 
     window
+}
+
+/// Applies `--animation` and `--say` once a character is on screen.
+fn apply_startup(
+    ui: &Rc<Ui>,
+    state: &Rc<RefCell<State>>,
+    audio: &AudioPlayer,
+    startup: crate::Startup,
+) {
+    if let Some(name) = startup.animation.as_deref() {
+        let index = {
+            let s = state.borrow();
+            s.player
+                .as_ref()
+                .and_then(|p| p.character().animations.iter().position(|a| a.name.eq_ignore_ascii_case(name)))
+        };
+        match index {
+            Some(index) => ui.list.select_row(ui.list.row_at_index(index as i32).as_ref()),
+            None => toast(ui, &format!("No animation named “{}”", name)),
+        }
+    }
+
+    if let Some(text) = startup.say {
+        ui.say_entry.set_text(&text);
+        // Wait for the first frame so the balloon animates from a real clock.
+        let ui = ui.clone();
+        let state = state.clone();
+        let audio = audio.clone();
+        glib::timeout_add_local_once(std::time::Duration::from_millis(400), move || {
+            start_speaking(&ui, &state, &audio);
+        });
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -623,7 +660,11 @@ fn populate_list(ui: &Rc<Ui>, character: &Character) {
         let detail = if frames == 0 {
             "unreadable".to_string()
         } else {
-            format!("{} frames · {:.1}s", frames, animation.duration_ms() as f64 / 1000.0)
+            format!(
+                "{} · {:.1}s",
+                plural(frames, "frame"),
+                animation.duration_ms() as f64 / 1000.0
+            )
         };
         let subtitle = gtk::Label::builder()
             .label(&detail)
@@ -818,9 +859,9 @@ fn refresh_frame(ui: &Rc<Ui>, state: &Rc<RefCell<State>>, update_label: bool) {
         let Some(player) = s.player.as_mut() else { return };
         let image = player.render(mouth);
         let label = if update_label {
-            player.current_animation().map(|a| {
-                format!("{} · {} frames", a.name, a.frames.len())
-            })
+            player
+                .current_animation()
+                .map(|a| format!("{} · {}", a.name, plural(a.frames.len(), "frame")))
         } else {
             None
         };
@@ -828,6 +869,7 @@ fn refresh_frame(ui: &Rc<Ui>, state: &Rc<RefCell<State>>, update_label: bool) {
     };
 
     if let Some(image) = image {
+        ui.stage.set_content_bounds(image.bounds);
         ui.stage.set_texture(Some(texture_from(image)));
     }
     if let Some(label) = label {
@@ -911,7 +953,7 @@ fn begin_speech(
         .stage
         .frame_clock()
         .map(|c| c.frame_time())
-        .unwrap_or_else(|| glib::monotonic_time());
+        .unwrap_or_else(glib::monotonic_time);
 
     let (balloon, switched_from) = {
         let mut s = state.borrow_mut();
@@ -1154,6 +1196,14 @@ fn show_about(ui: &Rc<Ui>) {
 
 fn toast(ui: &Rc<Ui>, message: &str) {
     ui.toasts.add_toast(adw::Toast::new(message));
+}
+
+fn plural(count: usize, noun: &str) -> String {
+    if count == 1 {
+        format!("{} {}", count, noun)
+    } else {
+        format!("{} {}s", count, noun)
+    }
 }
 
 fn file_label(path: &Path) -> String {

@@ -64,6 +64,18 @@ fn main() -> ExitCode {
     }
     println!("decoded       {}/{} images ({} pixels)", character.image_count() - failures, character.image_count(), total_pixels);
 
+    let overlay_anims = character
+        .animations
+        .iter()
+        .filter(|a| a.frames.iter().any(|f| !f.overlays.is_empty()))
+        .count();
+    let overlay_frames: usize = character
+        .animations
+        .iter()
+        .map(|a| a.frames.iter().filter(|f| !f.overlays.is_empty()).count())
+        .sum();
+    println!("mouth overlays {} animations, {} frames", overlay_anims, overlay_frames);
+
     let empty_anims = character.animations.iter().filter(|a| a.frames.is_empty()).count();
     if empty_anims > 0 {
         println!("warning       {} animations parsed with no frames", empty_anims);
@@ -85,8 +97,16 @@ fn main() -> ExitCode {
             eprintln!("animation {:?} has {} frames", anim.name, anim.frames.len());
             return ExitCode::FAILURE;
         };
+        // Optional mouth shape, so lip-sync substitution can be inspected.
+        let mouth = args
+            .iter()
+            .position(|a| a == "--mouth")
+            .and_then(|p| args.get(p + 1))
+            .and_then(|s| s.parse::<u8>().ok())
+            .and_then(acs::MouthShape::from_u8);
+
         let mut cache = ImageCache::new();
-        match character.render_frame(frame, None, &mut cache) {
+        match character.render_frame(frame, mouth, &mut cache) {
             Ok(img) => match write_png(out, &img) {
                 Ok(()) => println!("wrote         {} ({} frame {})", out, anim.name, frame_no),
                 Err(e) => {

@@ -5,21 +5,42 @@ use std::collections::HashMap;
 use crate::types::{Character, Frame, IndexedImage, MouthShape};
 use crate::Error;
 
+/// Bounding box of the non-transparent pixels of a frame, as
+/// `(left, top, right, bottom)` with the right and bottom edges exclusive.
+pub type Bounds = (u32, u32, u32, u32);
+
 /// A composited frame, 8 bits per channel, non-premultiplied.
 #[derive(Debug, Clone)]
 pub struct RgbaImage {
     pub width: u32,
     pub height: u32,
     pub data: Vec<u8>,
+    /// Extent of the drawn artwork. Character canvases are usually much taller
+    /// than the art they hold, so callers that need to position things against
+    /// the character (a word balloon, say) want this rather than the canvas.
+    pub bounds: Option<Bounds>,
 }
 
 impl RgbaImage {
     pub fn new(width: u32, height: u32) -> Self {
-        Self { width, height, data: vec![0; (width as usize) * (height as usize) * 4] }
+        Self {
+            width,
+            height,
+            data: vec![0; (width as usize) * (height as usize) * 4],
+            bounds: None,
+        }
     }
 
     pub fn stride(&self) -> usize {
         self.width as usize * 4
+    }
+
+    /// Widens the recorded artwork extent to include the given pixel.
+    fn include(&mut self, x: u32, y: u32) {
+        self.bounds = Some(match self.bounds {
+            None => (x, y, x + 1, y + 1),
+            Some((x0, y0, x1, y1)) => (x0.min(x), y0.min(y), x1.max(x + 1), y1.max(y + 1)),
+        });
     }
 }
 
@@ -39,9 +60,8 @@ impl ImageCache {
         character: &Character,
         index: u32,
     ) -> Result<&'a IndexedImage, Error> {
-        if !self.images.contains_key(&index) {
-            let img = character.image(index as usize)?;
-            self.images.insert(index, img);
+        if let std::collections::hash_map::Entry::Vacant(slot) = self.images.entry(index) {
+            slot.insert(character.image(index as usize)?);
         }
         Ok(&self.images[&index])
     }
@@ -128,6 +148,7 @@ fn blit(
             canvas.data[o + 1] = c.g;
             canvas.data[o + 2] = c.b;
             canvas.data[o + 3] = 0xFF;
+            canvas.include(dx as u32, dy as u32);
         }
     }
 }

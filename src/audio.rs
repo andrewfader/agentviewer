@@ -102,7 +102,6 @@ pub fn parse_wav(data: &[u8]) -> Option<(WavFormat, &[u8])> {
 
         if id == b"fmt " && body + 16 <= data.len() {
             format = Some(WavFormat {
-                tag: u16::from_le_bytes([data[body], data[body + 1]]),
                 channels: u16::from_le_bytes([data[body + 2], data[body + 3]]).max(1),
                 sample_rate: u32::from_le_bytes([
                     data[body + 4],
@@ -127,7 +126,6 @@ pub fn parse_wav(data: &[u8]) -> Option<(WavFormat, &[u8])> {
 
 #[derive(Debug, Clone, Copy)]
 pub struct WavFormat {
-    pub tag: u16,
     pub channels: u16,
     pub sample_rate: u32,
     pub bits: u16,

@@ -56,16 +56,8 @@ impl Player {
         self.animation
     }
 
-    pub fn frame_index(&self) -> usize {
-        self.frame
-    }
-
     pub fn is_playing(&self) -> bool {
         self.playing
-    }
-
-    pub fn is_looping(&self) -> bool {
-        self.looping
     }
 
     pub fn set_looping(&mut self, looping: bool) {
@@ -111,27 +103,6 @@ impl Player {
         self.elapsed_us = 0;
     }
 
-    /// Jumps to the animation's exit frame so it can play out gracefully.
-    /// Returns false when the animation has no exit sequence.
-    pub fn exit(&mut self) -> bool {
-        let Some(frame) = self.current_frame() else { return false };
-        let exit = frame.exit_frame;
-        if exit < 0 || exit as usize >= self.frame_count() {
-            return false;
-        }
-        self.frame = exit as usize;
-        self.elapsed_us = 0;
-        self.playing = true;
-        true
-    }
-
-    pub fn seek(&mut self, frame: usize) {
-        if frame < self.frame_count() {
-            self.frame = frame;
-            self.elapsed_us = 0;
-        }
-    }
-
     /// Advances playback by `dt_us` microseconds.
     pub fn advance(&mut self, dt_us: u64) -> Tick {
         let mut tick = Tick::default();
@@ -142,8 +113,7 @@ impl Player {
         self.elapsed_us += dt_us;
         let mut steps = 0;
 
-        loop {
-            let Some(frame) = self.current_frame() else { break };
+        while let Some(frame) = self.current_frame() {
             let due_us = frame.duration_ms() * 1000;
 
             // A zero-duration frame advances immediately.
@@ -227,12 +197,5 @@ impl Player {
         let character = Rc::clone(&self.character);
         let frame = character.animations.get(index)?.frames.get(frame_index)?;
         character.render_frame(frame, mouth, &mut self.cache).ok()
-    }
-
-    /// Renders a still of the first frame of an animation, for previews.
-    pub fn render_first_frame(&mut self, index: usize) -> Option<RgbaImage> {
-        let character = Rc::clone(&self.character);
-        let frame = character.animations.get(index)?.frames.first()?;
-        character.render_frame(frame, None, &mut self.cache).ok()
     }
 }

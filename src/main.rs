@@ -9,26 +9,52 @@ mod window;
 use std::path::PathBuf;
 
 use adw::prelude::*;
-use gtk::gio;
 use gtk::glib;
 
 const APP_ID: &str = "org.gnome.AgentViewer";
 
+const USAGE: &str = "\
+Agent Viewer — play Microsoft Agent characters
+
+Usage:
+  agentview [OPTIONS] [FILE.acs]
+
+Options:
+  -a, --animation NAME   Play this animation once the character loads
+  -s, --say TEXT         Speak this text once the character loads
+  -h, --help             Show this help
+";
+
+/// What to do automatically once a character finishes loading.
+#[derive(Clone, Default)]
+pub struct Startup {
+    pub animation: Option<String>,
+    pub say: Option<String>,
+}
+
 fn main() -> glib::ExitCode {
-    let app = adw::Application::builder()
-        .application_id(APP_ID)
-        .flags(gio::ApplicationFlags::HANDLES_OPEN)
-        .build();
+    let mut startup = Startup::default();
+    let mut file: Option<PathBuf> = None;
+    let mut args = std::env::args().skip(1);
 
-    app.connect_activate(|app| {
-        window::build(app, None).present();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "-h" | "--help" => {
+                print!("{}", USAGE);
+                return glib::ExitCode::SUCCESS;
+            }
+            "-a" | "--animation" => startup.animation = args.next(),
+            "-s" | "--say" => startup.say = args.next(),
+            other => file = Some(PathBuf::from(other)),
+        }
+    }
+
+    let app = adw::Application::builder().application_id(APP_ID).build();
+
+    app.connect_activate(move |app| {
+        window::build(app, file.clone(), startup.clone()).present();
     });
 
-    // Launched with file arguments, e.g. from a file manager or the shell.
-    app.connect_open(|app, files, _hint| {
-        let path: Option<PathBuf> = files.first().and_then(|f| f.path());
-        window::build(app, path).present();
-    });
-
-    app.run()
+    // Arguments are parsed above, so hand the toolkit an empty list.
+    app.run_with_args::<&str>(&[])
 }
