@@ -73,7 +73,12 @@ pub fn synthesize(text: &str, voice: Option<&VoiceInfo>) -> Result<Speech, Strin
     }
 
     let (envelope, duration_ms) = envelope_of(&out.stdout);
-    Ok(Speech { text: text.to_string(), wav: out.stdout, duration_ms, envelope })
+    Ok(Speech {
+        text: text.to_string(),
+        wav: out.stdout,
+        duration_ms,
+        envelope,
+    })
 }
 
 /// espeak-ng voice name, e.g. `en+m3`, derived from the character's VOICEINFO.
@@ -144,7 +149,9 @@ fn pitch(voice: Option<&VoiceInfo>) -> u32 {
 
 /// Root-mean-square loudness per window, normalised against the loudest window.
 fn envelope_of(wav: &[u8]) -> (Vec<f32>, u64) {
-    let Some((fmt, pcm)) = parse_wav(wav) else { return (Vec::new(), 0) };
+    let Some((fmt, pcm)) = parse_wav(wav) else {
+        return (Vec::new(), 0);
+    };
     if fmt.bits != 16 || pcm.is_empty() {
         return (Vec::new(), 0);
     }

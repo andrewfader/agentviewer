@@ -10,7 +10,10 @@ use std::sync::{Arc, Mutex};
 
 /// Players tried in order; each one reads a WAVE stream on stdin.
 const BACKENDS: &[(&str, &[&str])] = &[
-    ("paplay", &["--client-name=Agent Viewer", "--stream-name=Agent Viewer"]),
+    (
+        "paplay",
+        &["--client-name=Agent Viewer", "--stream-name=Agent Viewer"],
+    ),
     ("pw-play", &["-"]),
     ("aplay", &["-q", "-"]),
 ];
@@ -114,7 +117,11 @@ pub fn parse_wav(data: &[u8]) -> Option<(WavFormat, &[u8])> {
             });
         } else if id == b"data" {
             let end = body.saturating_add(size).min(data.len());
-            let pcm = if size == 0 || body + size > data.len() { &data[body..] } else { &data[body..end] };
+            let pcm = if size == 0 || body + size > data.len() {
+                &data[body..]
+            } else {
+                &data[body..end]
+            };
             return format.map(|f| (f, pcm));
         }
 

@@ -37,7 +37,10 @@ impl<'a> Cursor<'a> {
     }
 
     fn take(&mut self, n: usize) -> Result<&'a [u8], Error> {
-        let end = self.pos.checked_add(n).ok_or_else(|| Error::Parse("length overflow".into()))?;
+        let end = self
+            .pos
+            .checked_add(n)
+            .ok_or_else(|| Error::Parse("length overflow".into()))?;
         if end > self.data.len() {
             return Err(Error::Parse(format!(
                 "unexpected end of file: wanted {} bytes at {}, file is {} bytes",
@@ -102,9 +105,26 @@ impl<'a> Cursor<'a> {
         Ok(String::from_utf16_lossy(&utf16))
     }
 
+    /// A legacy Agent 1.5 UTF-16 string, with no trailing NUL code unit.
+    pub fn string_legacy(&mut self) -> Result<String, Error> {
+        let count = self.u32()? as usize;
+        let byte_len = count
+            .checked_mul(2)
+            .ok_or_else(|| Error::Parse("legacy string length overflow".into()))?;
+        let units = self.take(byte_len)?;
+        let utf16: Vec<u16> = units
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        Ok(String::from_utf16_lossy(&utf16))
+    }
+
     /// An ACSLOCATOR: absolute byte offset plus size.
     pub fn locator(&mut self) -> Result<Locator, Error> {
-        Ok(Locator { offset: self.u32()? as usize, size: self.u32()? as usize })
+        Ok(Locator {
+            offset: self.u32()? as usize,
+            size: self.u32()? as usize,
+        })
     }
 
     /// A DATABLOCK: a ULONG size followed by that many bytes.

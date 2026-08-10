@@ -8,7 +8,7 @@ use acs::{ImageCache, RgbaImage};
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() {
-        eprintln!("usage: acsdump <file.acs> [--png <animation> <frame> <out.png>]");
+        eprintln!("usage: acsdump <file> [--anims] [--png <animation> <frame> <out.png>]");
         return ExitCode::from(2);
     }
 
@@ -23,13 +23,20 @@ fn main() -> ExitCode {
 
     let info = &character.info;
     println!("file          {}", path);
-    println!("version       {}.{}", info.major_version, info.minor_version);
+    println!(
+        "version       {}.{}",
+        info.major_version, info.minor_version
+    );
     println!("name          {}", info.name().unwrap_or("(unnamed)"));
     if let Some(d) = info.description() {
         println!("description   {}", d);
     }
     println!("size          {}x{}", info.width, info.height);
-    println!("palette       {} colours, transparent index {}", info.palette.len(), info.transparent_index);
+    println!(
+        "palette       {} colours, transparent index {}",
+        info.palette.len(),
+        info.transparent_index
+    );
     println!("flags         0x{:08X}", info.flags);
     println!("animations    {}", character.animations.len());
     println!("images        {}", character.image_count());
@@ -48,21 +55,57 @@ fn main() -> ExitCode {
         );
     }
 
-    // Decode every image; this is where decompression bugs surface.
+    // Decode every image; this is where decompression bugs surface.  A PNG
+    // request only decodes the selected frame, which keeps large Actor files
+    // pleasantly quick to inspect (their WMF assets are rasterized lazily).
     let mut failures = 0;
     let mut total_pixels: u64 = 0;
-    for i in 0..character.image_count() {
-        match character.image(i) {
-            Ok(img) => total_pixels += img.width as u64 * img.height as u64,
-            Err(e) => {
-                if failures < 5 {
-                    eprintln!("  image {} failed: {}", i, e);
+    let png_requested = args.iter().any(|a| a == "--png");
+    if !png_requested {
+        // Actor artwork is vector, so every frame is drawn rather than decoded;
+        // that goes through render_frame instead of the image table.
+        let mut cache = ImageCache::new();
+        for i in 0..character.image_count() {
+            let decoded = if character.is_actor() {
+                let frame = acs::Frame {
+                    images: vec![acs::FrameImage {
+                        image_index: i as u32,
+                        x: 0,
+                        y: 0,
+                    }],
+                    audio_index: None,
+                    duration: 0,
+                    exit_frame: -1,
+                    branches: Vec::new(),
+                    overlays: Vec::new(),
+                };
+                character
+                    .render_frame(&frame, None, &mut cache)
+                    .map(|img| img.width as u64 * img.height as u64)
+            } else {
+                character
+                    .image(i)
+                    .map(|img| img.width as u64 * img.height as u64)
+            };
+            match decoded {
+                Ok(pixels) => total_pixels += pixels,
+                Err(e) => {
+                    if failures < 5 {
+                        eprintln!("  image {} failed: {}", i, e);
+                    }
+                    failures += 1;
                 }
-                failures += 1;
             }
         }
     }
-    println!("decoded       {}/{} images ({} pixels)", character.image_count() - failures, character.image_count(), total_pixels);
+    if !png_requested {
+        println!(
+            "decoded       {}/{} images ({} pixels)",
+            character.image_count() - failures,
+            character.image_count(),
+            total_pixels
+        );
+    }
 
     let overlay_anims = character
         .animations
@@ -74,11 +117,36 @@ fn main() -> ExitCode {
         .iter()
         .map(|a| a.frames.iter().filter(|f| !f.overlays.is_empty()).count())
         .sum();
-    println!("mouth overlays {} animations, {} frames", overlay_anims, overlay_frames);
+    println!(
+        "mouth overlays {} animations, {} frames",
+        overlay_anims, overlay_frames
+    );
 
-    let empty_anims = character.animations.iter().filter(|a| a.frames.is_empty()).count();
+    if args.iter().any(|a| a == "--anims") {
+        for anim in &character.animations {
+            let sounds = anim.frames.iter().filter(|f| f.audio_index.is_some()).count();
+            let branches: usize = anim.frames.iter().map(|f| f.branches.len()).sum();
+            println!(
+                "  {:<20} {:>3} frames {:>6}ms  {} sounds, {} branches",
+                anim.name,
+                anim.frames.len(),
+                anim.duration_ms(),
+                sounds,
+                branches
+            );
+        }
+    }
+
+    let empty_anims = character
+        .animations
+        .iter()
+        .filter(|a| a.frames.is_empty())
+        .count();
     if empty_anims > 0 {
-        println!("warning       {} animations parsed with no frames", empty_anims);
+        println!(
+            "warning       {} animations parsed with no frames",
+            empty_anims
+        );
     }
 
     if let Some(pos) = args.iter().position(|a| a == "--png") {
@@ -134,7 +202,11 @@ fn crc32(data: &[u8]) -> u32 {
     for (i, e) in table.iter_mut().enumerate() {
         let mut c = i as u32;
         for _ in 0..8 {
-            c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+            c = if c & 1 != 0 {
+                0xEDB8_8320 ^ (c >> 1)
+            } else {
+                c >> 1
+            };
         }
         *e = c;
     }

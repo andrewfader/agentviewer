@@ -80,7 +80,10 @@ const LANG_ENGLISH: u16 = 0x09;
 
 /// Maps a POSIX locale such as `de_DE.UTF-8` to a Windows primary language id.
 pub fn primary_language_from_locale(locale: &str) -> Option<u16> {
-    let code = locale.split(['_', '-', '.', '@']).next()?.to_ascii_lowercase();
+    let code = locale
+        .split(['_', '-', '.', '@'])
+        .next()?
+        .to_ascii_lowercase();
     Some(match code.as_str() {
         "ar" => 0x01,
         "zh" => 0x04,
@@ -127,7 +130,9 @@ impl CharacterInfo {
     }
 
     pub fn name_for(&self, primary: Option<u16>) -> Option<&str> {
-        self.localized_preferred(primary).map(|l| l.name.as_str()).filter(|s| !s.is_empty())
+        self.localized_preferred(primary)
+            .map(|l| l.name.as_str())
+            .filter(|s| !s.is_empty())
     }
 
     pub fn description_for(&self, primary: Option<u16>) -> Option<&str> {
@@ -378,12 +383,23 @@ fn read_character_info_with(
     let _anim_set_major = c.u16()?;
     let _anim_set_minor = c.u16()?;
 
-    let voice = if want_voice { Some(read_voice(&mut c)?) } else { None };
-    let balloon = if want_balloon { Some(read_balloon(&mut c)?) } else { None };
+    let voice = if want_voice {
+        Some(read_voice(&mut c)?)
+    } else {
+        None
+    };
+    let balloon = if want_balloon {
+        Some(read_balloon(&mut c)?)
+    } else {
+        None
+    };
 
     let palette_count = c.count_u32()?;
     if palette_count == 0 || palette_count > 256 {
-        return Err(Error::Parse(format!("implausible palette size {}", palette_count)));
+        return Err(Error::Parse(format!(
+            "implausible palette size {}",
+            palette_count
+        )));
     }
     let mut palette = Vec::with_capacity(palette_count);
     for _ in 0..palette_count {
@@ -400,7 +416,9 @@ fn read_character_info_with(
     let mut localized = Vec::new();
     if localized_loc.offset != 0 && localized_loc.offset < data.len() {
         if let Ok(mut lc) = Cursor::at(data, localized_loc.offset) {
-            localized = lc.list(Cursor::count_u16, read_localized).unwrap_or_default();
+            localized = lc
+                .list(Cursor::count_u16, read_localized)
+                .unwrap_or_default();
         }
     }
 
@@ -454,13 +472,20 @@ fn read_character_info(data: &[u8], offset: usize) -> Result<CharacterInfo, Erro
 
 fn read_frame(c: &mut Cursor) -> Result<Frame, Error> {
     let images = c.list(Cursor::count_u16, |c| {
-        Ok(FrameImage { image_index: c.u32()?, x: c.i16()?, y: c.i16()? })
+        Ok(FrameImage {
+            image_index: c.u32()?,
+            x: c.i16()?,
+            y: c.i16()?,
+        })
     })?;
     let audio_raw = c.u16()?;
     let duration = c.u16()?;
     let exit_frame = c.i16()?;
     let branches = c.list(Cursor::count_u8, |c| {
-        Ok(Branch { frame_index: c.u16()?, probability: c.u16()? })
+        Ok(Branch {
+            frame_index: c.u16()?,
+            probability: c.u16()?,
+        })
     })?;
     let overlays = c.list(Cursor::count_u8, |c| {
         let shape = MouthShape::from_u8(c.u8()?);
@@ -475,13 +500,23 @@ fn read_frame(c: &mut Cursor) -> Result<Frame, Error> {
         if has_region {
             c.datablock()?;
         }
-        Ok(Overlay { shape, replace_top_image, image_index, x, y })
+        Ok(Overlay {
+            shape,
+            replace_top_image,
+            image_index,
+            x,
+            y,
+        })
     })?;
 
     Ok(Frame {
         images,
         // 0xFFFF marks "no sound" rather than audio entry 65535.
-        audio_index: if audio_raw == u16::MAX { None } else { Some(audio_raw) },
+        audio_index: if audio_raw == u16::MAX {
+            None
+        } else {
+            Some(audio_raw)
+        },
         duration,
         exit_frame,
         branches,
@@ -499,7 +534,12 @@ fn read_animation(data: &[u8], name: String, loc: Locator) -> Result<Animation, 
     };
     let return_animation = c.string()?;
     let frames = c.list(Cursor::count_u16, read_frame)?;
-    Ok(Animation { name, transition, return_animation, frames })
+    Ok(Animation {
+        name,
+        transition,
+        return_animation,
+        frames,
+    })
 }
 
 /// A parsed character file. Image and audio payloads stay in the backing buffer
@@ -510,10 +550,16 @@ pub struct Character {
     pub animations: Vec<Animation>,
     image_locs: Vec<Locator>,
     audio_locs: Vec<Locator>,
+    legacy_images: Vec<IndexedImage>,
+    legacy_audio: Vec<Vec<u8>>,
+    pub(crate) actor: Option<crate::actor::ActorSource>,
 }
 
 impl Character {
     pub fn parse(data: Vec<u8>) -> Result<Self, Error> {
+        if data.starts_with(b"LP") {
+            return crate::actor::parse(data);
+        }
         let mut c = Cursor::new(&data);
         let signature = c.u32()?;
         match signature {
@@ -523,13 +569,7 @@ impl Character {
                     "this is an .acf file; its animations live in separate .aca files".into(),
                 ))
             }
-            OLE_SIGNATURE => {
-                return Err(Error::Unsupported(
-                    "this is a Microsoft Agent 1.5 character (OLE compound file), \
-                     which uses a different layout than version 2"
-                        .into(),
-                ))
-            }
+            OLE_SIGNATURE => return crate::agent15::parse(data),
             other => {
                 return Err(Error::Unsupported(format!(
                     "not an ACS file (signature 0x{:08X})",
@@ -579,19 +619,99 @@ impl Character {
             Ok(loc)
         })?;
 
-        Ok(Character { data, info, animations, image_locs, audio_locs })
+        Ok(Character {
+            data,
+            info,
+            animations,
+            image_locs,
+            audio_locs,
+            legacy_images: Vec::new(),
+            legacy_audio: Vec::new(),
+            actor: None,
+        })
+    }
+
+    pub(crate) fn from_legacy(
+        info: CharacterInfo,
+        animations: Vec<Animation>,
+        images: Vec<IndexedImage>,
+        audio: Vec<Vec<u8>>,
+    ) -> Self {
+        Self {
+            data: Vec::new(),
+            info,
+            animations,
+            image_locs: Vec::new(),
+            audio_locs: Vec::new(),
+            legacy_images: images,
+            legacy_audio: audio,
+            actor: None,
+        }
+    }
+
+    pub(crate) fn from_actor(
+        info: CharacterInfo,
+        animations: Vec<Animation>,
+        actor: crate::actor::ActorSource,
+        audio: Vec<Vec<u8>>,
+    ) -> Self {
+        Self {
+            data: Vec::new(),
+            info,
+            animations,
+            image_locs: Vec::new(),
+            audio_locs: Vec::new(),
+            legacy_images: Vec::new(),
+            legacy_audio: audio,
+            actor: Some(actor),
+        }
     }
 
     pub fn image_count(&self) -> usize {
-        self.image_locs.len()
+        if let Some(actor) = &self.actor {
+            return actor.frame_count();
+        }
+        if self.legacy_images.is_empty() {
+            self.image_locs.len()
+        } else {
+            self.legacy_images.len()
+        }
     }
 
     pub fn audio_count(&self) -> usize {
-        self.audio_locs.len()
+        if self.legacy_audio.is_empty() {
+            self.audio_locs.len()
+        } else {
+            self.legacy_audio.len()
+        }
+    }
+
+    /// True when the character's artwork is vector and composites straight to
+    /// RGBA rather than through the palette.
+    pub fn is_actor(&self) -> bool {
+        self.actor.is_some()
+    }
+
+    /// Composites one Actor frame into a straight-alpha RGBA buffer of
+    /// `info.width` x `info.height`. `None` for palette-based characters.
+    pub(crate) fn actor_frame(&self, index: usize) -> Option<Result<Vec<u8>, Error>> {
+        self.actor.as_ref().map(|a| a.render(index))
     }
 
     /// Decodes one image from the image table.
     pub fn image(&self, index: usize) -> Result<IndexedImage, Error> {
+        if self.actor.is_some() {
+            return Err(Error::Unsupported(
+                "Actor artwork is vector; use render_frame".into(),
+            ));
+        }
+        if !self.legacy_images.is_empty() {
+            return self
+                .legacy_images
+                .get(index)
+                .cloned()
+                .ok_or_else(|| Error::Parse(format!("image index {} out of range", index)));
+        }
         let loc = *self
             .image_locs
             .get(index)
@@ -617,16 +737,25 @@ impl Character {
             raw
         };
 
-        Ok(IndexedImage { width, height, pixels })
+        Ok(IndexedImage {
+            width,
+            height,
+            pixels,
+        })
     }
 
     /// Raw RIFF/WAVE bytes for an audio table entry.
     pub fn audio(&self, index: usize) -> Option<&[u8]> {
+        if !self.legacy_audio.is_empty() {
+            return self.legacy_audio.get(index).map(Vec::as_slice);
+        }
         let loc = self.audio_locs.get(index)?;
         self.data.get(loc.offset..loc.offset + loc.size)
     }
 
     pub fn animation_by_name(&self, name: &str) -> Option<&Animation> {
-        self.animations.iter().find(|a| a.name.eq_ignore_ascii_case(name))
+        self.animations
+            .iter()
+            .find(|a| a.name.eq_ignore_ascii_case(name))
     }
 }

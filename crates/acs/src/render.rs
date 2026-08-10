@@ -35,6 +35,19 @@ impl RgbaImage {
         self.width as usize * 4
     }
 
+    /// Derives [`Self::bounds`] from the pixels already in the buffer, for
+    /// callers that fill `data` wholesale instead of blitting into it.
+    fn recompute_bounds(&mut self) {
+        self.bounds = None;
+        for y in 0..self.height {
+            for x in 0..self.width {
+                if self.data[(y as usize * self.width as usize + x as usize) * 4 + 3] > 0 {
+                    self.include(x, y);
+                }
+            }
+        }
+    }
+
     /// Widens the recorded artwork extent to include the given pixel.
     fn include(&mut self, x: u32, y: u32) {
         self.bounds = Some(match self.bounds {
@@ -84,6 +97,19 @@ impl Character {
     ) -> Result<RgbaImage, Error> {
         let mut canvas = RgbaImage::new(self.info.width as u32, self.info.height as u32);
 
+        // Actor frames are drawn from vector artwork and arrive already
+        // composited, so they bypass the palette path entirely.
+        if let Some(index) = frame.images.first().map(|i| i.image_index) {
+            if let Some(rgba) = self.actor_frame(index as usize) {
+                canvas.data = rgba?;
+                canvas.recompute_bounds();
+                return Ok(canvas);
+            }
+        }
+        if self.is_actor() {
+            return Ok(canvas); // A blank frame: the character is hidden.
+        }
+
         // Frames rarely define all seven mouth shapes, so fall back to the
         // closest one by openness rather than dropping the overlay entirely.
         let overlay = mouth.and_then(|m| {
@@ -103,13 +129,27 @@ impl Character {
                 continue;
             }
             if let Ok(img) = cache.get(self, fi.image_index) {
-                blit(&mut canvas, img, fi.x as i32, fi.y as i32, &self.info.palette, self.info.transparent_index);
+                blit(
+                    &mut canvas,
+                    img,
+                    fi.x as i32,
+                    fi.y as i32,
+                    &self.info.palette,
+                    self.info.transparent_index,
+                );
             }
         }
 
         if let Some(o) = overlay {
             if let Ok(img) = cache.get(self, o.image_index as u32) {
-                blit(&mut canvas, img, o.x as i32, o.y as i32, &self.info.palette, self.info.transparent_index);
+                blit(
+                    &mut canvas,
+                    img,
+                    o.x as i32,
+                    o.y as i32,
+                    &self.info.palette,
+                    self.info.transparent_index,
+                );
             }
         }
 
@@ -138,11 +178,15 @@ fn blit(
             if dx < 0 || dx >= canvas.width as i32 {
                 continue;
             }
-            let Some(&idx) = img.pixels.get(src_row + x as usize) else { continue };
+            let Some(&idx) = img.pixels.get(src_row + x as usize) else {
+                continue;
+            };
             if idx == transparent {
                 continue;
             }
-            let Some(c) = palette.get(idx as usize) else { continue };
+            let Some(c) = palette.get(idx as usize) else {
+                continue;
+            };
             let o = (dy as usize * canvas.width as usize + dx as usize) * 4;
             canvas.data[o] = c.r;
             canvas.data[o + 1] = c.g;

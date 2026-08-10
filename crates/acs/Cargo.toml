@@ -2,9 +2,10 @@
 name = "acs"
 version = "0.1.0"
 edition = "2021"
-description = "Parser for Microsoft Agent version 2 character files (.acs)"
+description = "Parser for Microsoft Agent (.acs) and Microsoft Actor (.act) character files"
 
 [dependencies]
+cfb = "0.10"
 
 [[bin]]
 name = "acsdump"

@@ -108,7 +108,9 @@ mod imp {
             self.draw_backdrop(snapshot, w, h);
 
             let texture = self.texture.borrow();
-            let Some(texture) = texture.as_ref() else { return };
+            let Some(texture) = texture.as_ref() else {
+                return;
+            };
 
             let (tw, th) = (texture.width() as f32, texture.height() as f32);
             if tw <= 0.0 || th <= 0.0 {
@@ -128,8 +130,11 @@ mod imp {
             let x = ((w - dw) / 2.0).round();
             let y = ((h - dh) * 0.72).round().max(0.0);
 
-            let filter =
-                if self.smooth.get() { gsk::ScalingFilter::Trilinear } else { gsk::ScalingFilter::Nearest };
+            let filter = if self.smooth.get() {
+                gsk::ScalingFilter::Trilinear
+            } else {
+                gsk::ScalingFilter::Nearest
+            };
             snapshot.append_scaled_texture(texture, filter, &graphene::Rect::new(x, y, dw, dh));
 
             if let Some(balloon) = self.balloon.borrow().as_ref() {
@@ -241,8 +246,11 @@ mod imp {
             // balloon is too narrow to offer any choice.
             let tail_lo = box_x + BALLOON_RADIUS + TAIL_WIDTH / 2.0;
             let tail_hi = box_x + box_w - BALLOON_RADIUS - TAIL_WIDTH / 2.0;
-            let tail_x =
-                if tail_lo <= tail_hi { anchor_x.clamp(tail_lo, tail_hi) } else { box_x + box_w / 2.0 };
+            let tail_x = if tail_lo <= tail_hi {
+                anchor_x.clamp(tail_lo, tail_hi)
+            } else {
+                box_x + box_w / 2.0
+            };
             let tail_tip_y = (tail_base_y + TAIL_HEIGHT).min(anchor_y);
 
             let builder = gsk::PathBuilder::new();
@@ -262,12 +270,21 @@ mod imp {
             edge.move_to(tail_x - TAIL_WIDTH / 2.0, tail_base_y - 2.0);
             edge.line_to(tail_x - TAIL_WIDTH / 6.0, tail_tip_y);
             edge.line_to(tail_x + TAIL_WIDTH / 2.0, tail_base_y - 2.0);
-            snapshot.append_stroke(&edge.to_path(), &gsk::Stroke::new(BORDER_WIDTH), &balloon.border);
+            snapshot.append_stroke(
+                &edge.to_path(),
+                &gsk::Stroke::new(BORDER_WIDTH),
+                &balloon.border,
+            );
 
             snapshot.append_border(
                 &rounded,
                 &[BORDER_WIDTH; 4],
-                &[balloon.border, balloon.border, balloon.border, balloon.border],
+                &[
+                    balloon.border,
+                    balloon.border,
+                    balloon.border,
+                    balloon.border,
+                ],
             );
 
             snapshot.save();
@@ -299,7 +316,12 @@ impl Stage {
     }
 
     pub fn set_texture(&self, texture: Option<gdk::Texture>) {
-        let previous_size = self.imp().texture.borrow().as_ref().map(|t| (t.width(), t.height()));
+        let previous_size = self
+            .imp()
+            .texture
+            .borrow()
+            .as_ref()
+            .map(|t| (t.width(), t.height()));
         let new_size = texture.as_ref().map(|t| (t.width(), t.height()));
         self.imp().texture.replace(texture);
         if previous_size != new_size {
@@ -310,9 +332,9 @@ impl Stage {
 
     /// Records where the artwork sits inside the texture, in texture pixels.
     pub fn set_content_bounds(&self, bounds: Option<(u32, u32, u32, u32)>) {
-        self.imp().content.set(
-            bounds.map(|(l, t, r, b)| (l as f32, t as f32, r as f32, b as f32)),
-        );
+        self.imp()
+            .content
+            .set(bounds.map(|(l, t, r, b)| (l as f32, t as f32, r as f32, b as f32)));
     }
 
     pub fn set_balloon(&self, balloon: Option<Balloon>) {

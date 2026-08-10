@@ -17,7 +17,7 @@ const USAGE: &str = "\
 Agent Viewer — play Microsoft Agent characters
 
 Usage:
-  agentview [OPTIONS] [FILE.acs]
+  agentview [OPTIONS] [FILE.acs|FILE.act]
 
 Options:
   -a, --animation NAME   Play this animation once the character loads

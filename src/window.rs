@@ -63,7 +63,10 @@ pub fn build(
     initial: Option<PathBuf>,
     startup: crate::Startup,
 ) -> adw::ApplicationWindow {
-    let state = Rc::new(RefCell::new(State { sound_enabled: true, ..State::default() }));
+    let state = Rc::new(RefCell::new(State {
+        sound_enabled: true,
+        ..State::default()
+    }));
     let audio = AudioPlayer::new();
 
     let window = adw::ApplicationWindow::builder()
@@ -126,10 +129,12 @@ pub fn build(
     sidebar.append(&list_scroll);
 
     let sidebar_page = adw::ToolbarView::builder().content(&sidebar).build();
-    sidebar_page.add_top_bar(&adw::HeaderBar::builder()
-        .title_widget(&adw::WindowTitle::new("Animations", ""))
-        .show_end_title_buttons(false)
-        .build());
+    sidebar_page.add_top_bar(
+        &adw::HeaderBar::builder()
+            .title_widget(&adw::WindowTitle::new("Animations", ""))
+            .show_end_title_buttons(false)
+            .build(),
+    );
 
     // --- Content: stage and controls ----------------------------------------
 
@@ -138,7 +143,7 @@ pub fn build(
     stage.set_vexpand(true);
 
     let placeholder = gtk::Label::builder()
-        .label("Open a Microsoft Agent character (.acs) to begin")
+        .label("Open a Microsoft Agent or Actor character (.acs, .act) to begin")
         .css_classes(["dim-label", "title-4"])
         .wrap(true)
         .justify(gtk::Justification::Center)
@@ -285,8 +290,19 @@ pub fn build(
         placeholder,
     });
 
-    wire(&ui, &state, &audio, &open_button, &info_button, &stop_button, &zoom_in, &zoom_out,
-         &zoom_reset, &backdrop_button, app);
+    wire(
+        &ui,
+        &state,
+        &audio,
+        &open_button,
+        &info_button,
+        &stop_button,
+        &zoom_in,
+        &zoom_out,
+        &zoom_reset,
+        &backdrop_button,
+        app,
+    );
 
     if let Some(path) = initial {
         load(&ui, &state, &audio, &path);
@@ -306,12 +322,17 @@ fn apply_startup(
     if let Some(name) = startup.animation.as_deref() {
         let index = {
             let s = state.borrow();
-            s.player
-                .as_ref()
-                .and_then(|p| p.character().animations.iter().position(|a| a.name.eq_ignore_ascii_case(name)))
+            s.player.as_ref().and_then(|p| {
+                p.character()
+                    .animations
+                    .iter()
+                    .position(|a| a.name.eq_ignore_ascii_case(name))
+            })
         };
         match index {
-            Some(index) => ui.list.select_row(ui.list.row_at_index(index as i32).as_ref()),
+            Some(index) => ui
+                .list
+                .select_row(ui.list.row_at_index(index as i32).as_ref()),
             None => toast(ui, &format!("No animation named “{}”", name)),
         }
     }
@@ -349,9 +370,11 @@ fn wire(
         let audio = audio.clone();
         move || {
             let filter = gtk::FileFilter::new();
-            filter.set_name(Some("Microsoft Agent characters"));
+            filter.set_name(Some("Microsoft Agent and Actor characters"));
             filter.add_pattern("*.acs");
             filter.add_pattern("*.ACS");
+            filter.add_pattern("*.act");
+            filter.add_pattern("*.ACT");
             let all = gtk::FileFilter::new();
             all.set_name(Some("All files"));
             all.add_pattern("*");
@@ -368,13 +391,17 @@ fn wire(
             let ui = ui.clone();
             let state = state.clone();
             let audio = audio.clone();
-            dialog.open(Some(&ui.window.clone()), gio::Cancellable::NONE, move |result| {
-                if let Ok(file) = result {
-                    if let Some(path) = file.path() {
-                        load(&ui, &state, &audio, &path);
+            dialog.open(
+                Some(&ui.window.clone()),
+                gio::Cancellable::NONE,
+                move |result| {
+                    if let Ok(file) = result {
+                        if let Some(path) = file.path() {
+                            load(&ui, &state, &audio, &path);
+                        }
                     }
-                }
-            });
+                },
+            );
         }
     };
 
@@ -490,14 +517,17 @@ fn wire(
     }
     {
         let list = ui.list.clone();
-        ui.search.connect_search_changed(move |_| list.invalidate_filter());
+        ui.search
+            .connect_search_changed(move |_| list.invalidate_filter());
     }
 
     // --- Playback controls --------------------------------------------------
     {
         let ui = ui.clone();
         let state = state.clone();
-        ui.play_button.clone().connect_clicked(move |_| toggle_play(&ui, &state));
+        ui.play_button
+            .clone()
+            .connect_clicked(move |_| toggle_play(&ui, &state));
     }
     {
         let ui = ui.clone();
@@ -607,7 +637,11 @@ fn load(ui: &Rc<Ui>, state: &Rc<RefCell<State>>, audio: &AudioPlayer, path: &Pat
     };
 
     let primary = system_primary_language();
-    let name = character.info.name_for(primary).unwrap_or("Unnamed character").to_string();
+    let name = character
+        .info
+        .name_for(primary)
+        .unwrap_or("Unnamed character")
+        .to_string();
     let animation_count = character.animations.len();
 
     let character = Rc::new(character);
@@ -625,8 +659,13 @@ fn load(ui: &Rc<Ui>, state: &Rc<RefCell<State>>, audio: &AudioPlayer, path: &Pat
     }
 
     ui.title.set_title(&name);
-    ui.title.set_subtitle(&format!("{} · {} animations", file_label(path), animation_count));
-    ui.window.set_title(Some(&format!("{} — Agent Viewer", name)));
+    ui.title.set_subtitle(&format!(
+        "{} · {} animations",
+        file_label(path),
+        animation_count
+    ));
+    ui.window
+        .set_title(Some(&format!("{} — Agent Viewer", name)));
     ui.placeholder.set_visible(false);
     ui.stage.set_balloon(None);
     ui.say_entry.set_sensitive(true);
@@ -637,7 +676,8 @@ fn load(ui: &Rc<Ui>, state: &Rc<RefCell<State>>, audio: &AudioPlayer, path: &Pat
     // Prefer a resting pose so the character opens in a natural state.
     let initial = pick_initial_animation(&character);
     if let Some(index) = initial {
-        ui.list.select_row(ui.list.row_at_index(index as i32).as_ref());
+        ui.list
+            .select_row(ui.list.row_at_index(index as i32).as_ref());
     } else {
         toast(ui, "This character has no playable animations");
     }
@@ -691,7 +731,12 @@ fn populate_list(ui: &Rc<Ui>, character: &Character) {
 
 /// Chooses the animation to show when a character is first opened.
 fn pick_initial_animation(character: &Character) -> Option<usize> {
-    let playable = |i: usize| character.animations.get(i).is_some_and(|a| !a.frames.is_empty());
+    let playable = |i: usize| {
+        character
+            .animations
+            .get(i)
+            .is_some_and(|a| !a.frames.is_empty())
+    };
 
     for preferred in ["RestPose", "Idle1_1", "Greet", "Show", "Showing"] {
         if let Some(i) = character
@@ -708,8 +753,10 @@ fn pick_initial_animation(character: &Character) -> Option<usize> {
     for state in &character.info.states {
         if state.name.eq_ignore_ascii_case("showing") {
             for name in &state.animations {
-                if let Some(i) =
-                    character.animations.iter().position(|a| a.name.eq_ignore_ascii_case(name))
+                if let Some(i) = character
+                    .animations
+                    .iter()
+                    .position(|a| a.name.eq_ignore_ascii_case(name))
                 {
                     if playable(i) {
                         return Some(i);
@@ -721,12 +768,7 @@ fn pick_initial_animation(character: &Character) -> Option<usize> {
     (0..character.animations.len()).find(|&i| playable(i))
 }
 
-fn select_animation(
-    ui: &Rc<Ui>,
-    state: &Rc<RefCell<State>>,
-    audio: &AudioPlayer,
-    index: usize,
-) {
+fn select_animation(ui: &Rc<Ui>, state: &Rc<RefCell<State>>, audio: &AudioPlayer, index: usize) {
     let sound = {
         let mut s = state.borrow_mut();
         if s.player.as_ref().and_then(|p| p.animation_index()) == Some(index) && s.speech.is_some()
@@ -856,7 +898,9 @@ fn refresh_frame(ui: &Rc<Ui>, state: &Rc<RefCell<State>>, update_label: bool) {
     let (image, label) = {
         let mut s = state.borrow_mut();
         let mouth = s.last_mouth.filter(|_| s.speech.is_some());
-        let Some(player) = s.player.as_mut() else { return };
+        let Some(player) = s.player.as_mut() else {
+            return;
+        };
         let image = player.render(mouth);
         let label = if update_label {
             player
@@ -909,7 +953,9 @@ fn start_speaking(ui: &Rc<Ui>, state: &Rc<RefCell<State>>, audio: &AudioPlayer) 
 
     let voice = {
         let s = state.borrow();
-        let Some(player) = s.player.as_ref() else { return };
+        let Some(player) = s.player.as_ref() else {
+            return;
+        };
         player.character().info.voice.clone()
     };
 
@@ -943,12 +989,7 @@ fn start_speaking(ui: &Rc<Ui>, state: &Rc<RefCell<State>>, audio: &AudioPlayer) 
     });
 }
 
-fn begin_speech(
-    ui: &Rc<Ui>,
-    state: &Rc<RefCell<State>>,
-    audio: &AudioPlayer,
-    speech: Speech,
-) {
+fn begin_speech(ui: &Rc<Ui>, state: &Rc<RefCell<State>>, audio: &AudioPlayer, speech: Speech) {
     let now_us = ui
         .stage
         .frame_clock()
@@ -957,7 +998,9 @@ fn begin_speech(
 
     let (balloon, switched_from) = {
         let mut s = state.borrow_mut();
-        let Some(player) = s.player.as_mut() else { return };
+        let Some(player) = s.player.as_mut() else {
+            return;
+        };
 
         // Lip sync needs a frame carrying mouth overlays; switch to a speaking
         // animation when the current one has none, and restore it afterwards.
@@ -985,8 +1028,11 @@ fn begin_speech(
     audio.stop_all();
     audio.play(speech.wav.clone());
 
-    state.borrow_mut().speech =
-        Some(ActiveSpeech { speech, started_us: now_us, restore_animation: switched_from });
+    state.borrow_mut().speech = Some(ActiveSpeech {
+        speech,
+        started_us: now_us,
+        restore_animation: switched_from,
+    });
 
     update_controls(ui, state);
 }
@@ -1016,7 +1062,9 @@ fn update_balloon_progress(ui: &Rc<Ui>, state: &Rc<RefCell<State>>, visible_char
     // Only the revealed length changes; everything else stays as authored.
     let balloon = {
         let mut s = state.borrow_mut();
-        let Some(balloon) = s.balloon.as_mut() else { return };
+        let Some(balloon) = s.balloon.as_mut() else {
+            return;
+        };
         balloon.visible_chars = visible_chars;
         balloon.clone()
     };
@@ -1035,7 +1083,10 @@ fn animation_has_overlays(character: &Character, index: usize) -> bool {
 /// state.
 fn speaking_animation(character: &Character) -> Option<usize> {
     let index_of = |name: &str| {
-        character.animations.iter().position(|a| a.name.eq_ignore_ascii_case(name))
+        character
+            .animations
+            .iter()
+            .position(|a| a.name.eq_ignore_ascii_case(name))
     };
 
     for state in &character.info.states {
@@ -1065,15 +1116,32 @@ fn balloon_for(info: &CharacterInfo, text: &str) -> Balloon {
     let default_border = RGBA::new(0.25, 0.25, 0.25, 1.0);
 
     let to_rgba = |c: acs::Rgb| {
-        RGBA::new(c.r as f32 / 255.0, c.g as f32 / 255.0, c.b as f32 / 255.0, 1.0)
+        RGBA::new(
+            c.r as f32 / 255.0,
+            c.g as f32 / 255.0,
+            c.b as f32 / 255.0,
+            1.0,
+        )
     };
 
     Balloon {
         text: text.to_string(),
         visible_chars: 0,
-        foreground: info.balloon.as_ref().map(|b| to_rgba(b.foreground)).unwrap_or(default_fg),
-        background: info.balloon.as_ref().map(|b| to_rgba(b.background)).unwrap_or(default_bg),
-        border: info.balloon.as_ref().map(|b| to_rgba(b.border)).unwrap_or(default_border),
+        foreground: info
+            .balloon
+            .as_ref()
+            .map(|b| to_rgba(b.foreground))
+            .unwrap_or(default_fg),
+        background: info
+            .balloon
+            .as_ref()
+            .map(|b| to_rgba(b.background))
+            .unwrap_or(default_bg),
+        border: info
+            .balloon
+            .as_ref()
+            .map(|b| to_rgba(b.border))
+            .unwrap_or(default_border),
         font_family: info
             .balloon
             .as_ref()
@@ -1118,16 +1186,32 @@ fn show_info(ui: &Rc<Ui>, state: &Rc<RefCell<State>>) {
     if let Some(description) = info.description_for(primary) {
         add_row(&general, "Description", description);
     }
-    add_row(&general, "Size", &format!("{} × {} px", info.width, info.height));
-    add_row(&general, "Format version", &format!("{}.{}", info.major_version, info.minor_version));
-    add_row(&general, "Palette", &format!("{} colours", info.palette.len()));
+    add_row(
+        &general,
+        "Size",
+        &format!("{} × {} px", info.width, info.height),
+    );
+    add_row(
+        &general,
+        "Format version",
+        &format!("{}.{}", info.major_version, info.minor_version),
+    );
+    add_row(
+        &general,
+        "Palette",
+        &format!("{} colours", info.palette.len()),
+    );
     if let Some(path) = s.path.as_ref() {
         add_row(&general, "File", &path.display().to_string());
     }
     page.add(&general);
 
     let contents = adw::PreferencesGroup::builder().title("Contents").build();
-    add_row(&contents, "Animations", &character.animations.len().to_string());
+    add_row(
+        &contents,
+        "Animations",
+        &character.animations.len().to_string(),
+    );
     add_row(&contents, "Images", &character.image_count().to_string());
     add_row(&contents, "Sounds", &character.audio_count().to_string());
     add_row(&contents, "States", &info.states.len().to_string());
@@ -1165,13 +1249,18 @@ fn show_info(ui: &Rc<Ui>, state: &Rc<RefCell<State>>) {
         page.add(&group);
     }
 
-    let dialog = adw::PreferencesDialog::builder().title("Character Details").build();
+    let dialog = adw::PreferencesDialog::builder()
+        .title("Character Details")
+        .build();
     dialog.add(&page);
     dialog.present(Some(&ui.window));
 }
 
 fn add_row(group: &adw::PreferencesGroup, title: &str, value: &str) {
-    let row = adw::ActionRow::builder().title(title).subtitle(value).build();
+    let row = adw::ActionRow::builder()
+        .title(title)
+        .subtitle(value)
+        .build();
     row.set_subtitle_selectable(true);
     row.add_css_class("property");
     group.add(&row);
@@ -1207,7 +1296,9 @@ fn plural(count: usize, noun: &str) -> String {
 }
 
 fn file_label(path: &Path) -> String {
-    path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.display().to_string())
+    path.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| path.display().to_string())
 }
 
 /// Windows primary language id matching the user's locale, for picking among

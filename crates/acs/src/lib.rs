@@ -1,14 +1,17 @@
-//! Reader for Microsoft Agent version 2 character files (`.acs`).
+//! Reader for Microsoft Agent character files (`.acs`).
 //!
 //! Layout follows the MSAgent Character Data Specification: a header of
 //! locators pointing at the character description, animation table, image table
 //! and audio table, with most payloads run through a proprietary bit-level
 //! compressor.
 
+mod actor;
+mod agent15;
 pub mod decompress;
 pub mod reader;
 pub mod render;
 pub mod types;
+pub mod wmf;
 
 pub use render::{ImageCache, RgbaImage};
 pub use types::{

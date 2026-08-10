@@ -110,7 +110,9 @@ pub fn decompress(data: &[u8], uncompressed_size: usize) -> Result<Vec<u8>, Erro
 
         let Some(run) = r.read_unary(12) else { break };
         if run == 12 {
-            return Err(Error::Compression("invalid length prefix (12 set bits)".into()));
+            return Err(Error::Compression(
+                "invalid length prefix (12 set bits)".into(),
+            ));
         }
         // A unary run of N ones contributes 2^N - 1, then N literal bits follow.
         count += ((1u32 << run) - 1) as usize;

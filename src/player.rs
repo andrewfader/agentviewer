@@ -65,15 +65,19 @@ impl Player {
     }
 
     pub fn frame_count(&self) -> usize {
-        self.current_animation().map(|a| a.frames.len()).unwrap_or(0)
+        self.current_animation()
+            .map(|a| a.frames.len())
+            .unwrap_or(0)
     }
 
     pub fn current_animation(&self) -> Option<&acs::Animation> {
-        self.animation.and_then(|i| self.character.animations.get(i))
+        self.animation
+            .and_then(|i| self.character.animations.get(i))
     }
 
     fn current_frame(&self) -> Option<&acs::Frame> {
-        self.current_animation().and_then(|a| a.frames.get(self.frame))
+        self.current_animation()
+            .and_then(|a| a.frames.get(self.frame))
     }
 
     /// Selects an animation and rewinds to its first frame. Returns the sound
@@ -83,7 +87,9 @@ impl Player {
         self.frame = 0;
         self.elapsed_us = 0;
         self.playing = self.frame_count() > 0;
-        self.current_frame().and_then(|f| f.audio_index).map(|i| i as usize)
+        self.current_frame()
+            .and_then(|f| f.audio_index)
+            .map(|i| i as usize)
     }
 
     pub fn play(&mut self) {
@@ -152,7 +158,10 @@ impl Player {
     /// `None` when the animation is over.
     fn next_frame(&mut self) -> Option<usize> {
         let count = self.frame_count();
-        let branches = self.current_frame().map(|f| f.branches.clone()).unwrap_or_default();
+        let branches = self
+            .current_frame()
+            .map(|f| f.branches.clone())
+            .unwrap_or_default();
 
         if !branches.is_empty() {
             let roll = self.next_random(100) + 1; // 1..=100
