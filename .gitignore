@@ -1,0 +1,10 @@
+# Cargo build artifacts
+/target
+crates/*/target
+
+# Backup files from rustfmt
+**/*.rs.bk
+
+# Editor / OS cruft
+.DS_Store
+*.swp
