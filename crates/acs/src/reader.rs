@@ -99,8 +99,10 @@ impl<'a> Cursor<'a> {
         }
         let units = self.take((count + 1) * 2)?;
         let utf16: Vec<u16> = units[..count * 2]
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&c| u16::from_le_bytes(c))
             .collect();
         Ok(String::from_utf16_lossy(&utf16))
     }
@@ -113,8 +115,10 @@ impl<'a> Cursor<'a> {
             .ok_or_else(|| Error::Parse("legacy string length overflow".into()))?;
         let units = self.take(byte_len)?;
         let utf16: Vec<u16> = units
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&c| u16::from_le_bytes(c))
             .collect();
         Ok(String::from_utf16_lossy(&utf16))
     }

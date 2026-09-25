@@ -78,7 +78,9 @@ fn parse_acf(bytes: &[u8]) -> Result<(Vec<AnimationRef>, CharacterInfo), Error> 
     // Four legacy flag bytes follow the palette.
     let palette_pos = data.len() - 1028;
     let palette = data[palette_pos..palette_pos + 1024]
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|q| Rgb {
             r: q[2],
             g: q[1],
