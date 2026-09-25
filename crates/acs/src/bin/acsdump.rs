@@ -124,7 +124,11 @@ fn main() -> ExitCode {
 
     if args.iter().any(|a| a == "--anims") {
         for anim in &character.animations {
-            let sounds = anim.frames.iter().filter(|f| f.audio_index.is_some()).count();
+            let sounds = anim
+                .frames
+                .iter()
+                .filter(|f| f.audio_index.is_some())
+                .count();
             let branches: usize = anim.frames.iter().map(|f| f.branches.len()).sum();
             println!(
                 "  {:<20} {:>3} frames {:>6}ms  {} sounds, {} branches",

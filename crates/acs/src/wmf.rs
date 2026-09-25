@@ -65,8 +65,15 @@ fn colorref(v: u32) -> Rgb {
 #[derive(Clone, Copy)]
 enum Object {
     None,
-    Pen { style: u16, width: i16, color: Rgb },
-    Brush { style: u16, color: Rgb },
+    Pen {
+        style: u16,
+        width: i16,
+        color: Rgb,
+    },
+    Brush {
+        style: u16,
+        color: Rgb,
+    },
     /// Fonts are tracked only so object-table indices stay aligned; Actor's
     /// handful of text records are not drawn.
     Font,
@@ -285,8 +292,7 @@ pub fn render(wmf: &[u8], width: usize, height: usize) -> Result<Bitmap, Error> 
                     spans.push(start..points.len());
                 }
                 // Sub-paths fill as one figure so interior holes punch through.
-                let rings: Vec<&[(f32, f32)]> =
-                    spans.iter().map(|s| &points[s.clone()]).collect();
+                let rings: Vec<&[(f32, f32)]> = spans.iter().map(|s| &points[s.clone()]).collect();
                 canvas.fill(&rings, &dc);
                 for s in &spans {
                     canvas.stroke(&points[s.clone()], true, &dc);
@@ -467,7 +473,11 @@ impl Canvas {
         // Square off the joints so corners do not show a notch.
         if t > 1.5 {
             let joints = if close { n } else { n - 1 };
-            for &(x, y) in points.iter().take(joints + 1).skip(if close { 0 } else { 1 }) {
+            for &(x, y) in points
+                .iter()
+                .take(joints + 1)
+                .skip(if close { 0 } else { 1 })
+            {
                 let h = t / 2.0;
                 push_ring_ccw(
                     &mut self.edges,
@@ -519,7 +529,8 @@ impl Canvas {
         let weight = 1.0 / SUBSAMPLES as f32;
         for y in y0..y1 {
             let row = y * self.width;
-            while pending < order.len() && self.edges[order[pending] as usize].top() < (y + 1) as f32
+            while pending < order.len()
+                && self.edges[order[pending] as usize].top() < (y + 1) as f32
             {
                 active.push(order[pending]);
                 pending += 1;
@@ -543,7 +554,8 @@ impl Canvas {
                 if crossings.len() < 2 {
                     continue;
                 }
-                crossings.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+                crossings
+                    .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 
                 let mut count = 0.0f32;
                 for i in 0..crossings.len() - 1 {
@@ -642,6 +654,25 @@ fn push_ring_ccw(edges: &mut Vec<Edge>, ring: &[(f32, f32)]) {
     }
 }
 
+/// Adds horizontal coverage for `[x0, x1)` on one sub-scanline, weighting the
+/// partially covered pixels at each end by how much of them the span covers.
+fn add_span(row: &mut [f32], x0: f32, x1: f32, weight: f32) {
+    let a = x0.max(0.0);
+    let b = x1.min(row.len() as f32);
+    if b <= a {
+        return;
+    }
+    let first = a.floor() as usize;
+    let last = (b.ceil() as usize).min(row.len());
+    for (px, slot) in row.iter_mut().enumerate().take(last).skip(first) {
+        let l = a.max(px as f32);
+        let r = b.min(px as f32 + 1.0);
+        if r > l {
+            *slot += (r - l) * weight;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -681,7 +712,9 @@ mod tests {
         record(META_SELECTOBJECT, &[1]);
         record(
             META_POLYGON,
-            &[4, 25, 25, 75, 25, 75, 75, 25, 75].map(|v: i16| v as u16).as_slice(),
+            [4, 25, 25, 75, 25, 75, 75, 25, 75]
+                .map(|v: i16| v as u16)
+                .as_slice(),
         );
         record(META_EOF, &[]);
         out
@@ -717,24 +750,5 @@ mod tests {
         let bitmap = render(&red_square(), 41, 41).unwrap();
         let edge = pixel(&bitmap, 10, 20)[3];
         assert!(edge > 0 && edge < 255, "expected a soft edge, got {}", edge);
-    }
-}
-
-/// Adds horizontal coverage for `[x0, x1)` on one sub-scanline, weighting the
-/// partially covered pixels at each end by how much of them the span covers.
-fn add_span(row: &mut [f32], x0: f32, x1: f32, weight: f32) {
-    let a = x0.max(0.0);
-    let b = x1.min(row.len() as f32);
-    if b <= a {
-        return;
-    }
-    let first = a.floor() as usize;
-    let last = (b.ceil() as usize).min(row.len());
-    for (px, slot) in row.iter_mut().enumerate().take(last).skip(first) {
-        let l = a.max(px as f32);
-        let r = b.min(px as f32 + 1.0);
-        if r > l {
-            *slot += (r - l) * weight;
-        }
     }
 }

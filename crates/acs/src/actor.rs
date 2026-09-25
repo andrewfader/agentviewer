@@ -315,7 +315,9 @@ fn build_frames(slots: &[Slot], first_frame: u16, frame_total: usize) -> Vec<Fra
         let image_index = if slot.id == BLANK {
             None
         } else {
-            slot.id.checked_sub(first_frame).filter(|i| (*i as usize) < frame_total)
+            slot.id
+                .checked_sub(first_frame)
+                .filter(|i| (*i as usize) < frame_total)
         };
 
         slot_to_frame[start] = frames.len();
@@ -374,72 +376,6 @@ fn build_frames(slots: &[Slot], first_frame: u16, frame_total: usize) -> Vec<Fra
     }
 
     frames
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A sequence region holding one sequence: a frame carrying a sound, a
-    /// frame carrying a branch back to the first, and a closing frame.
-    /// Byte offset of the first slot's id: the two-byte region prefix plus the
-    /// sequence header's count and flags words.
-    const FIRST_SLOT: usize = 6;
-
-    fn region() -> Vec<u8> {
-        let mut out = vec![0x00, 0x01]; // the region's two-byte prefix
-        for word in [
-            5, 0, // slot count, sequence flags
-            10, 100, FLAG_SOUND, // frame 10, 100ms, sound follows
-            3, 0x0100, 0, // the sound record: audio index 3
-            11, 200, FLAG_BRANCH, // frame 11, 200ms, branch follows
-            0, 0x4000, 0, // branch back to slot 0
-            12, 50, FLAG_LAST, // frame 12, 50ms, end of sequence
-        ] {
-            out.extend_from_slice(&word.to_le_bytes());
-        }
-        out
-    }
-
-    #[test]
-    fn splits_sequences_on_their_slot_count() {
-        let data = region();
-        let sequences = parse_sequences(&data, 0..data.len(), 1);
-        assert_eq!(sequences.len(), 1);
-        assert_eq!(sequences[0].len(), 5);
-        assert_eq!(sequences[0][0].id, 10);
-    }
-
-    #[test]
-    fn resolves_sounds_branches_and_durations() {
-        let data = region();
-        let sequences = parse_sequences(&data, 0..data.len(), 1);
-        let frames = build_frames(&sequences[0], 10, 5);
-
-        // Sound and branch records are consumed, not mistaken for frames.
-        assert_eq!(frames.len(), 3);
-        assert_eq!(frames[0].images[0].image_index, 0);
-        assert_eq!(frames[0].audio_index, Some(3));
-        assert_eq!(frames[0].duration, 10); // 100ms in hundredths
-        assert_eq!(frames[1].images[0].image_index, 1);
-        assert_eq!(frames[2].images[0].image_index, 2);
-
-        // The only branch in a chain catches everything, and its target slot
-        // resolves to the frame that slot became.
-        assert_eq!(frames[1].branches.len(), 1);
-        assert_eq!(frames[1].branches[0].frame_index, 0);
-        assert_eq!(frames[1].branches[0].probability, 100);
-    }
-
-    #[test]
-    fn treats_the_blank_id_as_an_empty_frame() {
-        let mut data = region();
-        data[FIRST_SLOT..FIRST_SLOT + 2].copy_from_slice(&BLANK.to_le_bytes());
-        let sequences = parse_sequences(&data, 0..data.len(), 1);
-        let frames = build_frames(&sequences[0], 10, 5);
-        assert!(frames[0].images.is_empty());
-        assert_eq!(frames[0].audio_index, Some(3));
-    }
 }
 
 /// A 6x7x6 colour cube. Actor frames are composited straight to RGBA, so this
@@ -623,4 +559,71 @@ pub(crate) fn parse(data: Vec<u8>) -> Result<Character, Error> {
         cache: RefCell::new(HashMap::new()),
     };
     Ok(Character::from_actor(info, animations, source, audio))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A sequence region holding one sequence: a frame carrying a sound, a
+    /// frame carrying a branch back to the first, and a closing frame.
+    /// Byte offset of the first slot's id: the two-byte region prefix plus the
+    /// sequence header's count and flags words.
+    const FIRST_SLOT: usize = 6;
+
+    #[rustfmt::skip]
+    fn region() -> Vec<u8> {
+        let mut out = vec![0x00, 0x01]; // the region's two-byte prefix
+        for word in [
+            5, 0, // slot count, sequence flags
+            10, 100, FLAG_SOUND, // frame 10, 100ms, sound follows
+            3, 0x0100, 0, // the sound record: audio index 3
+            11, 200, FLAG_BRANCH, // frame 11, 200ms, branch follows
+            0, 0x4000, 0, // branch back to slot 0
+            12, 50, FLAG_LAST, // frame 12, 50ms, end of sequence
+        ] {
+            out.extend_from_slice(&word.to_le_bytes());
+        }
+        out
+    }
+
+    #[test]
+    fn splits_sequences_on_their_slot_count() {
+        let data = region();
+        let sequences = parse_sequences(&data, 0..data.len(), 1);
+        assert_eq!(sequences.len(), 1);
+        assert_eq!(sequences[0].len(), 5);
+        assert_eq!(sequences[0][0].id, 10);
+    }
+
+    #[test]
+    fn resolves_sounds_branches_and_durations() {
+        let data = region();
+        let sequences = parse_sequences(&data, 0..data.len(), 1);
+        let frames = build_frames(&sequences[0], 10, 5);
+
+        // Sound and branch records are consumed, not mistaken for frames.
+        assert_eq!(frames.len(), 3);
+        assert_eq!(frames[0].images[0].image_index, 0);
+        assert_eq!(frames[0].audio_index, Some(3));
+        assert_eq!(frames[0].duration, 10); // 100ms in hundredths
+        assert_eq!(frames[1].images[0].image_index, 1);
+        assert_eq!(frames[2].images[0].image_index, 2);
+
+        // The only branch in a chain catches everything, and its target slot
+        // resolves to the frame that slot became.
+        assert_eq!(frames[1].branches.len(), 1);
+        assert_eq!(frames[1].branches[0].frame_index, 0);
+        assert_eq!(frames[1].branches[0].probability, 100);
+    }
+
+    #[test]
+    fn treats_the_blank_id_as_an_empty_frame() {
+        let mut data = region();
+        data[FIRST_SLOT..FIRST_SLOT + 2].copy_from_slice(&BLANK.to_le_bytes());
+        let sequences = parse_sequences(&data, 0..data.len(), 1);
+        let frames = build_frames(&sequences[0], 10, 5);
+        assert!(frames[0].images.is_empty());
+        assert_eq!(frames[0].audio_index, Some(3));
+    }
 }
