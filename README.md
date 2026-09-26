@@ -132,3 +132,11 @@ Lip sync is approximate by necessity. Agent got viseme timings from SAPI 4;
 neither espeak-ng nor Kokoro expose them, so the mouth follows the loudness
 envelope of the rendered audio instead. Frames that lack a given mouth shape
 fall back to the nearest one by openness.
+
+## License
+
+This project is licensed under the [AGENTVIEWER Source-Available License](LICENSE).
+
+- **Personal & Evaluation Use**: Free to view, compile, and use for personal, non-commercial, or evaluation purposes with attribution.
+- **Notification**: Users redistributing or adapting this project for public release must notify the author.
+- **Commercial Use & Licensing**: Commercial use, embedding, or commercial redistribution requires explicit prior authorization from the author. The author reserves the right to deny permission or require a negotiated licensing fee.

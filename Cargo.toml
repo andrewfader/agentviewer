@@ -6,6 +6,7 @@ name = "agentview"
 version = "0.1.0"
 edition = "2021"
 description = "Native GNOME/Wayland viewer for Microsoft Agent (.acs) characters"
+license-file = "LICENSE"
 
 [dependencies]
 acs = { path = "crates/acs" }

@@ -1289,7 +1289,8 @@ fn show_about(ui: &Rc<Ui>) {
              Frames are composited from the character's palette and drawn as GPU textures \
              through GSK.",
         )
-        .license_type(gtk::License::MitX11)
+        .license_type(gtk::License::Custom)
+        .license(include_str!("../LICENSE"))
         .build();
     about.present(Some(&ui.window));
 }

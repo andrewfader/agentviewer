@@ -3,6 +3,7 @@ name = "acs"
 version = "0.1.0"
 edition = "2021"
 description = "Parser for Microsoft Agent (.acs) and Microsoft Actor (.act) character files"
+license-file = "../../LICENSE"
 
 [dependencies]
 cfb = "0.10"
