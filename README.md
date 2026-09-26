@@ -4,6 +4,8 @@ A native GNOME viewer for Microsoft Agent (`.acs`) and Microsoft Actor (`.act`)
 character files — the formats behind Clippit, Merlin, Peedy, Microsoft Bob and
 the rest of the late-90s desktop assistants.
 
+![Will character preview](will-preview.png)
+
 Open a character, browse its animations, play them with their original sound
 effects, and make it talk: text is spoken with espeak-ng and shown in the
 character's own word balloon, with the mouth driven from the synthesized audio.
