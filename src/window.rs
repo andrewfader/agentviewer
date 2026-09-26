@@ -14,7 +14,7 @@ use acs::{Character, CharacterInfo, MouthShape, RgbaImage};
 
 use crate::audio::AudioPlayer;
 use crate::player::Player;
-use crate::speech::{self, Speech};
+use crate::speech::{self, Engine, Speech};
 use crate::stage::{Backdrop, Balloon, Stage};
 
 /// How long the balloon lingers after the audio finishes.
@@ -36,6 +36,8 @@ struct State {
     last_mouth: Option<MouthShape>,
     last_visible_chars: usize,
     sound_enabled: bool,
+    speech_engine: Engine,
+    kokoro_voice: Option<String>,
     /// The balloon currently on screen, kept so paced reveal can update just
     /// its visible length.
     balloon: Option<Balloon>,
@@ -65,6 +67,8 @@ pub fn build(
 ) -> adw::ApplicationWindow {
     let state = Rc::new(RefCell::new(State {
         sound_enabled: true,
+        speech_engine: startup.speech_engine,
+        kokoro_voice: startup.kokoro_voice.clone(),
         ..State::default()
     }));
     let audio = AudioPlayer::new();
@@ -966,9 +970,16 @@ fn start_speaking(ui: &Rc<Ui>, state: &Rc<RefCell<State>>, audio: &AudioPlayer) 
     let state = state.clone();
     let audio = audio.clone();
     glib::spawn_future_local(async move {
-        // espeak-ng runs to completion before playback, so keep it off the
+        // Synthesis runs to completion before playback, so keep it off the
         // main loop to avoid stalling the frame clock.
-        let result = gio::spawn_blocking(move || speech::synthesize(&text, voice.as_ref())).await;
+        let (engine, kokoro_voice) = {
+            let s = state.borrow();
+            (s.speech_engine, s.kokoro_voice.clone())
+        };
+        let result = gio::spawn_blocking(move || {
+            speech::synthesize(&text, voice.as_ref(), engine, kokoro_voice.as_deref())
+        })
+        .await;
 
         ui.speak_button.set_sensitive(true);
         ui.speak_button.set_label("Speak");

@@ -7,8 +7,9 @@ the rest of the late-90s desktop assistants.
 ![Agent Viewer displaying William from Microsoft Bob's WILL.ACT](agentviewer-screenshot.png)
 
 Open a character, browse its animations, play them with their original sound
-effects, and make it talk: text is spoken with espeak-ng and shown in the
-character's own word balloon, with the mouth driven from the synthesized audio.
+effects, and make it talk: text is spoken with espeak-ng by default (or Kokoro)
+and shown in the character's own word balloon, with the mouth driven from the
+synthesized audio.
 
 * GTK 4 + libadwaita, running natively on Wayland
 * Frames are composited from the character's palette and drawn as GPU textures
@@ -25,7 +26,9 @@ Needs Rust, GTK 4 and libadwaita development files:
 cargo build --release
 ```
 
-Runtime dependencies: `espeak-ng` for speech, and one of `paplay`
+Runtime dependencies: `espeak-ng` for default speech, or
+[`kokoro-tts`](https://github.com/nazdridoy/kokoro-tts) when using `--tts kokoro`,
+and one of `paplay`
 (PulseAudio / PipeWire), `pw-play` or `aplay` for audio playback.
 
 ## Using it
@@ -35,12 +38,15 @@ Runtime dependencies: `espeak-ng` for speech, and one of `paplay`
 ./target/release/agentview Clippit.acs
 ./target/release/agentview ROVER.ACT
 ./target/release/agentview Peedy.acs --animation Confused --say "Hello there!"
+./target/release/agentview Peedy.acs --tts kokoro --say "Hello there!"
 ```
 
 | Option | |
 |---|---|
 | `-a`, `--animation NAME` | play this animation once the character loads |
 | `-s`, `--say TEXT` | speak this text once the character loads |
+| `--tts ENGINE` | speech engine: `espeak-ng` (default) or `kokoro` |
+| `--kokoro-voice ID` | Kokoro voice ID; defaults based on the character's gender |
 | `-h`, `--help` | usage |
 
 Characters can also be dropped onto the window.
@@ -68,7 +74,7 @@ crates/acs/     parsing and rendering, no UI dependencies
 src/            the application
   stage.rs      the character widget: texture and word balloon as GSK nodes
   player.rs     frame timing, branch probabilities, looping
-  speech.rs     espeak-ng synthesis and the amplitude envelope for lip sync
+  speech.rs     espeak-ng/Kokoro synthesis and the amplitude envelope for lip sync
   audio.rs      WAVE playback and parsing
   window.rs     the window and everything wired to it
 ```
@@ -123,6 +129,6 @@ left — so both are resolved into plain frame indices and cumulative percentage
 at parse time. The action table gives each sequence its name and variants.
 
 Lip sync is approximate by necessity. Agent got viseme timings from SAPI 4;
-espeak-ng does not expose them, so the mouth follows the loudness envelope of
-the rendered audio instead. Frames that lack a given mouth shape fall back to
-the nearest one by openness.
+neither espeak-ng nor Kokoro expose them, so the mouth follows the loudness
+envelope of the rendered audio instead. Frames that lack a given mouth shape
+fall back to the nearest one by openness.

@@ -22,6 +22,8 @@ Usage:
 Options:
   -a, --animation NAME   Play this animation once the character loads
   -s, --say TEXT         Speak this text once the character loads
+      --tts ENGINE       Speech engine: espeak-ng (default) or kokoro
+      --kokoro-voice ID  Kokoro voice ID (defaults based on character gender)
   -h, --help             Show this help
 ";
 
@@ -30,6 +32,8 @@ Options:
 pub struct Startup {
     pub animation: Option<String>,
     pub say: Option<String>,
+    pub speech_engine: speech::Engine,
+    pub kokoro_voice: Option<String>,
 }
 
 fn main() -> glib::ExitCode {
@@ -45,6 +49,14 @@ fn main() -> glib::ExitCode {
             }
             "-a" | "--animation" => startup.animation = args.next(),
             "-s" | "--say" => startup.say = args.next(),
+            "--tts" => match args.next().as_deref().and_then(speech::Engine::parse) {
+                Some(engine) => startup.speech_engine = engine,
+                None => {
+                    eprintln!("--tts must be either espeak-ng or kokoro");
+                    return glib::ExitCode::FAILURE;
+                }
+            },
+            "--kokoro-voice" => startup.kokoro_voice = args.next(),
             other => file = Some(PathBuf::from(other)),
         }
     }
