@@ -160,18 +160,6 @@ fn kokoro_output_path() -> std::path::PathBuf {
     ))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::Engine;
-
-    #[test]
-    fn parses_supported_engines() {
-        assert!(matches!(Engine::parse("espeak-ng"), Some(Engine::EspeakNg)));
-        assert!(matches!(Engine::parse("kokoro"), Some(Engine::Kokoro)));
-        assert!(Engine::parse("other").is_none());
-    }
-}
-
 /// espeak-ng voice name, e.g. `en+m3`, derived from the character's VOICEINFO.
 fn espeak_voice(voice: Option<&VoiceInfo>) -> String {
     let lang = voice
@@ -277,4 +265,16 @@ fn envelope_of(wav: &[u8]) -> (Vec<f32>, u64) {
         }
     }
     (envelope, duration_ms)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Engine;
+
+    #[test]
+    fn parses_supported_engines() {
+        assert!(matches!(Engine::parse("espeak-ng"), Some(Engine::EspeakNg)));
+        assert!(matches!(Engine::parse("kokoro"), Some(Engine::Kokoro)));
+        assert!(Engine::parse("other").is_none());
+    }
 }
